@@ -11,3 +11,5 @@ gcc -O2 -Wall -Wextra -o client client.c
 
 
 研究docker連接傳輸
+
+![image](https://github.com/hank903020/chat-windows/blob/main/chat-window.png)
