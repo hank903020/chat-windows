@@ -10,7 +10,7 @@
  *   4) 伺服器傳來的訊息「原樣印出、不自動加換行」
  *
  * 編譯：gcc -O2 -Wall -Wextra -o client client.c
- * 使用：./client <server-host> <port>
+ * 使用：./client <server-host> <port>  ./client_named 127.0.0.1 12345
  */
 
 #include <stdio.h>
@@ -28,6 +28,7 @@
 #define BUFSIZE 4096
 #define NAMELEN 32
 
+/* 同 server 的 trim_crlf 功能 */
 static void trim_crlf(char *s) {
     size_t n = strlen(s);
     while (n > 0 && (s[n-1] == '\n' || s[n-1] == '\r')) s[--n] = '\0';
