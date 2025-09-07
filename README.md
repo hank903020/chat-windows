@@ -1,8 +1,10 @@
 gcc -O2 -Wall -Wextra -o server server_multi.c
+
 ./server 12345
 
 
 gcc -O2 -Wall -Wextra -o client client.c
+
 ./client 127.0.0.1 12345
 
 
