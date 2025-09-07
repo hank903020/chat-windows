@@ -1,134 +1,304 @@
-/* client.c
+/* client_named.c
+
+ * 功能：TCP Chat Client（可自訂暱稱）
+
+ * 行為：
+
+ *   1) 啟動後先詢問使用者暱稱，連線成功即送出 "NICK <name>"
+
+ *   2) 之後用 select() 同時讀鍵盤與 socket
+
+ *   3) 鍵盤輸入：
+
+ *       - "/quit" 離線
+
+ *       - "/name 新名" 會送出 "NICK 新名" 給 Server
+
+ *       - 其他文字原樣送出（含換行也沒關係，Server 會去掉 \r\n）
+
+ *   4) 伺服器傳來的訊息「原樣印出、不自動加換行」
+
  *
- * 功能：簡單 TCP chat client
- * 說明：
- *  - 連線到 server
- *  - 使用 select() 同時監聽 stdin（鍵盤輸入）與 server socket
- *  - stdin 輸入會送給 server
- *  - server 傳來的訊息會印在終端
- *
- * 編譯：
- *   gcc -O2 -o client client.c
- *
- * 使用：
- *   ./client <server-host> <port>
- * 範例：
- *   ./client chat-server 12345
+
+ * 編譯：gcc -O2 -Wall -Wextra -o client client_named.c
+
+ * 使用：./client <server-host> <port>
+
  */
 
+
+
 #include <stdio.h>
+
 #include <stdlib.h>
+
 #include <string.h>
+
 #include <unistd.h>
+
 #include <errno.h>
 
-/* 網路相關 */
+
+
 #include <arpa/inet.h>
+
 #include <netdb.h>
+
 #include <sys/types.h>
+
 #include <sys/socket.h>
 
-/* select() */
 #include <sys/select.h>
 
-#define BUFSIZE 4096  /* 緩衝區大小 */
+
+
+#define BUFSIZE 4096
+
+#define NAMELEN 32
+
+
+
+static void trim_crlf(char *s) {
+
+    size_t n = strlen(s);
+
+    while (n > 0 && (s[n-1] == '\n' || s[n-1] == '\r')) s[--n] = '\0';
+
+}
+
+
 
 int main(int argc, char *argv[]) {
+
     if (argc != 3) {
+
         fprintf(stderr, "Usage: %s <server-host> <port>\n", argv[0]);
+
         return 1;
+
     }
 
-    const char *host = argv[1];  // server 主機名或 IP
-    const char *port = argv[2];  // server 埠號
+    const char *host = argv[1];
 
-    /* 1) 使用 getaddrinfo 解析 server hostname / port */
-    struct addrinfo hints, *res, *p;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;        // IPv4
-    hints.ai_socktype = SOCK_STREAM;  // TCP
+    const char *port = argv[2];
 
-    if (getaddrinfo(host, port, &hints, &res) != 0) {
-        perror("getaddrinfo");
-        return 1;
-    }
 
-    /* 2) 嘗試逐一建立 socket 並 connect */
-    int sockfd = -1;
-    for (p = res; p != NULL; p = p->ai_next) {
-        sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if (sockfd < 0) continue;  // socket 建立失敗，嘗試下一個
 
-        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == 0) break; // 成功連線
-        close(sockfd);
-        sockfd = -1;
-    }
-    freeaddrinfo(res);
+    // 取得暱稱
 
-    if (sockfd < 0) {
-        fprintf(stderr, "Unable to connect\n");
-        return 1;
-    }
+    char myname[NAMELEN];
 
-    printf("Connected to %s:%s\n", host, port);
+    printf("Enter your name: ");
+
     fflush(stdout);
 
-    fd_set readfds;   // select 用的 fd 集合
-    char buf[BUFSIZE];
+    if (!fgets(myname, sizeof(myname), stdin)) {
 
-    for (;;) {
-        FD_ZERO(&readfds);
+        fprintf(stderr, "no name input\n");
 
-        /* 3) 監聽 stdin（鍵盤輸入） */
-        FD_SET(STDIN_FILENO, &readfds);
+        return 1;
 
-        /* 4) 監聽 socket（來自 server 的訊息） */
-        FD_SET(sockfd, &readfds);
-
-        int maxfd = (STDIN_FILENO > sockfd ? STDIN_FILENO : sockfd) + 1;
-
-        /* 5) select 阻塞直到有 fd 可讀 */
-        int nready = select(maxfd, &readfds, NULL, NULL, NULL);
-        if (nready < 0) {
-            if (errno == EINTR) continue; // 被訊號中斷，重試
-            perror("select");
-            break;
-        }
-
-        /* 6) server socket 可讀：接收訊息 */
-        if (FD_ISSET(sockfd, &readfds)) {
-            ssize_t n = recv(sockfd, buf, sizeof(buf)-1, 0);
-            if (n <= 0) {
-                if (n == 0) printf("Server closed connection\n");
-                else perror("recv");
-                break;  // 連線關閉或錯誤，跳出迴圈
-            }
-            buf[n] = '\0';
-            printf("%s", buf);
-            fflush(stdout);
-        }
-
-        /* 7) stdin 可讀：輸入訊息送給 server */
-        if (FD_ISSET(STDIN_FILENO, &readfds)) {
-            if (!fgets(buf, sizeof(buf), stdin)) {
-                printf("stdin EOF, closing\n");
-                break;
-            }
-            /* 支援離開命令 /quit */
-            if (strcmp(buf, "/quit\n") == 0) {
-                printf("Quitting (requested)\n");
-                break;
-            }
-            ssize_t wn = send(sockfd, buf, strlen(buf), 0);
-            if (wn < 0) {
-                perror("send");
-                break;
-            }
-        }
     }
 
-    /* 8) 清理 socket */
+    trim_crlf(myname);
+
+    if (myname[0] == '\0') snprintf(myname, sizeof(myname), "anon");
+
+
+
+    // 解析位址
+
+    struct addrinfo hints, *res, *p;
+
+    memset(&hints, 0, sizeof(hints));
+
+    hints.ai_family   = AF_INET;
+
+    hints.ai_socktype = SOCK_STREAM;
+
+
+
+    int gai = getaddrinfo(host, port, &hints, &res);
+
+    if (gai != 0) {
+
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(gai));
+
+        return 1;
+
+    }
+
+
+
+    int sockfd = -1;
+
+    for (p = res; p; p = p->ai_next) {
+
+        sockfd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+
+        if (sockfd < 0) continue;
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == 0) break;
+
+        close(sockfd); sockfd = -1;
+
+    }
+
+    freeaddrinfo(res);
+
+
+
+    if (sockfd < 0) {
+
+        fprintf(stderr, "Unable to connect\n");
+
+        return 1;
+
+    }
+
+
+
+    printf("Connected to %s:%s as '%s'\n", host, port, myname);
+
+    fflush(stdout);
+
+
+
+    // 連線成功先把暱稱送給 Server
+
+    {
+
+        char nickbuf[BUFSIZE];
+
+        int n = snprintf(nickbuf, sizeof(nickbuf), "NICK %s", myname);
+
+        send(sockfd, nickbuf, (size_t)n, 0);
+
+    }
+
+
+
+    fd_set readfds;
+
+    char buf[BUFSIZE];
+
+
+
+    for (;;) {
+
+        FD_ZERO(&readfds);
+
+        FD_SET(STDIN_FILENO, &readfds);
+
+        FD_SET(sockfd, &readfds);
+
+        int maxfd = (sockfd > STDIN_FILENO ? sockfd : STDIN_FILENO);
+
+
+
+        int nready = select(maxfd + 1, &readfds, NULL, NULL, NULL);
+
+        if (nready < 0) {
+
+            if (errno == EINTR) continue;
+
+            perror("select");
+
+            break;
+
+        }
+
+
+
+        // 伺服器傳來的資料：原樣印出（不自動加換行）
+
+        if (FD_ISSET(sockfd, &readfds)) {
+
+            ssize_t n = recv(sockfd, buf, sizeof(buf) - 1, 0);
+
+            if (n <= 0) {
+
+                if (n == 0) printf("\nServer closed connection\n");
+
+                else perror("recv");
+
+                break;
+
+            }
+
+            buf[n] = '\0';
+
+            printf("%s", buf);  // 加 '\n'
+
+            fflush(stdout);
+
+        }
+
+
+
+        // 鍵盤輸入：轉送給 Server
+
+        if (FD_ISSET(STDIN_FILENO, &readfds)) {
+
+            if (!fgets(buf, sizeof(buf), stdin)) {
+
+                printf("\nstdin EOF, closing\n");
+
+                break;
+
+            }
+
+            // 指令處理
+
+            if (strncmp(buf, "/quit", 5) == 0) {
+
+                printf("bye\n");
+
+                break;
+
+            }
+
+            if (strncmp(buf, "/name ", 6) == 0) {
+
+                // /name 新名 -> 轉成 NICK 新名
+
+                char *newname = buf + 6;
+
+                trim_crlf(newname);
+
+                if (*newname) {
+
+                    char out[BUFSIZE];
+
+                    int m = snprintf(out, sizeof(out), "NICK %s", newname);
+
+                    send(sockfd, out, (size_t)m, 0);
+
+                    snprintf(myname, sizeof(myname), "%s", newname);
+
+                }
+
+                continue;
+
+            }
+
+
+
+            // 一般聊天訊息：原樣傳送（含換行也沒關係，Server 會去掉）
+
+            ssize_t wn = send(sockfd, buf, strlen(buf), 0);
+
+            if (wn < 0) { perror("send"); break; }
+
+        }
+
+    }
+
+
+
     close(sockfd);
+
     return 0;
+
 }
 
