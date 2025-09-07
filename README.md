@@ -1,5 +1,9 @@
-gcc -o server_multi server_multi.c
+gcc -O2 -Wall -Wextra -o server server_multi.c
+./server 12345
 
-gcc -o client client.c
+
+gcc -O2 -Wall -Wextra -o client client.c
+./client 127.0.0.1 12345
+
 
 研究docker連接傳輸
