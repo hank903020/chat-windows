@@ -1,3 +1,5 @@
+#基礎TCP網路通訊程式了解
+
 gcc -O2 -Wall -Wextra -o server server_multi.c
 
 ./server 12345
