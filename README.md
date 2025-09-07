@@ -10,6 +10,6 @@ gcc -o client client.c
 ./client 127.0.0.1 12345
 
 
-研究docker連接傳輸
+研究docker連接傳輸-進行中
 
 ![image](https://github.com/hank903020/chat-windows/blob/main/chat-window.png)
